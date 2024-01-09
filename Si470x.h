@@ -3,17 +3,35 @@
 
 #include "Arduino.h"
 
+// Regional register configuration (see AN230.pdf section 3.4)
+
+// BAND ranges
+static const uint8_t BAND_US_EU = 0b00;	                // 87.5–108 MHz (US / Europe)
+static const uint8_t BAND_JPW = 0b01;                   // 76–108 MHz (Japan wide)
+static const uint8_t BAND_JP = 0b10;                    // 76–90 MHz (Japan)
+
+// Channel Spacing
+static const uint8_t SPACE_200KHz = 0b00;               // 200 kHz (US / Australia)
+static const uint8_t SPACE_100KHz = 0b01;               // 100 kHz (Europe / Japan)
+static const uint8_t SPACE_50KHz = 0b10;                //  50 kHz (Other)
+
+// De-emphasis
+static const uint8_t DE_75us = 0b0;                     // De-emphasis 75 μs (US)
+static const uint8_t DE_50us = 0b1;                     // De-emphasis 50 µs (Europe / Australia / Japan)
+
+
+
 class Si470x
 {
   public:
     Si470x(int pinRST, int pinSDIO, int pinSCLK);
     void begin();
 
-	int getPN();
-	int getMFGID();
-	int getREV();
-	int getDEV();
-	int getFIRMWARE();
+	int getPartNumber();                // Get the part number
+	int getManufacturerID();            // Get the manufacturer ID
+	int getChipVersion();               // Get the chip version (silicon revision)
+	int getDevice();                    // Get the identity of device
+	int getFirmwareVersion();           // Get the firmware revision
 
   private:
     int  _pinRST;
@@ -21,14 +39,20 @@ class Si470x
 	int  _pinSCLK;
 	uint16_t _registers[16]; // shadow registers
 
-	void _init();
-	void _powerUp();
+    int _bandLow;
+    int _bandHigh;
+    int _freqSteps;
+
 	void _readRegisters();
+	void _readRegister0A();
 	byte _updateRegisters();
+
+	void _init();
+	void _powerup();
 
 	static const int I2C_ADDR = 0x10;
 
-	// See: https://www.sparkfun.com/datasheets/BreakoutBoards/Si4702-03-C19-1.pdf page 22 - 36
+    // Register definition (see Si4702/03-C19 pages 22-36)
 
 	// Register names
 	static const uint16_t DEVICEID = 0x00;              // Device ID
