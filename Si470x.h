@@ -1,12 +1,12 @@
-#ifndef Si4703_H
-#define Si4703_H
+#ifndef Si470X_H
+#define Si470X_H
 
 #include "Arduino.h"
 
-class Si4703
+class Si470x
 {
   public:
-    Si4703(int pinRST, int pinSDIO, int pinSCLK);
+    Si470x(int pinRST, int pinSDIO, int pinSCLK);
     void begin();
 
 	int getPN();
@@ -26,9 +26,9 @@ class Si4703
 	void _readRegisters();
 	byte _updateRegisters();
 
-	static const int SI4703 = 0x10;
+	static const int I2C_ADDR = 0x10;
 
-    // See: https://www.sparkfun.com/datasheets/BreakoutBoards/Si4702-03-C19-1.pdf page 22 - 36
+	// See: https://www.sparkfun.com/datasheets/BreakoutBoards/Si4702-03-C19-1.pdf page 22 - 36
 
 	// Register names
 	static const uint16_t DEVICEID = 0x00;              // Device ID
