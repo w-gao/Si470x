@@ -30,7 +30,7 @@ void Si470x::_readRegister0A() {
 byte Si470x::_updateRegisters() {
     Wire.beginTransmission(I2C_ADDR);
 
-    for (int i = 0x02; i < 0x08; i++) {
+    for (uint8_t i = 0x02; i < 0x08; i++) {
         Wire.write(_registers[i] >> 8);                     // Upper 8 bits
         Wire.write(_registers[i] & 0x00FF);                 // Lower 8 bits
     }
@@ -60,7 +60,7 @@ void Si470x::_init() {
 void Si470x::_powerup() {
     // Write address 07h
     _readRegisters();
-    _registers[TEST1] |= (1 << XOSCEN);                     // Set the XOSCEN bit to power up the crystal
+    _set(_registers[TEST1], XOSCEN, true);                  // Set the XOSCEN bit to power up the crystal
     _updateRegisters();
     delay(500);                                             // Wait for crystal to power up
 
@@ -81,9 +81,34 @@ void Si470x::begin() {
     _init();
     _powerup();
 
+    // Configure registers (see AN230 table 1)
+
     _readRegisters();
 
-    // Regional configuration registers (TODO: make these configurable) (see AN230 section 3.4)
+    // Write remaining hardware configuration registers
+    _set(_registers[TEST1], AHIZEN, 0);                                     // Disable Audio High-Z (default)
+    _set(_registers[SYSCONFIG1], GPIO1, GPIO1_MASK, GPIO_Z);                // Clear GPIO1 bits - High impedance (default)
+    _set(_registers[SYSCONFIG1], GPIO2, GPIO2_MASK, GPIO_Z);                // Clear GPIO2 bits - High impedance (default)
+    _set(_registers[SYSCONFIG1], GPIO3, GPIO3_MASK, GPIO_Z);                // Clear GPIO3 bits - High impedance (default)
+    _set(_registers[SYSCONFIG1], RDSIEN, 0);                                // Disable RDS Interrupt (default)
+    _set(_registers[SYSCONFIG1], STCIEN, 0);                                // Disable Seek/Tune Complete Interrupt (default)
+
+    // Write the general configuration registers 
+    _set(_registers[SYSCONFIG1], BLNDADJ, BLNDADJ_MASK, BLNDADJ_31_49);     // Set Stereo/Mono Blend Level Adjustment
+    _set(_registers[POWERCFG], DSMUTE, 1);                                  // Disable Softmute
+    // SMUTER
+    // SMUTEA
+    // VOLEXT
+    // SEEKTH
+    // SKSNR
+    // SKCNT
+    // RDSPRF
+    // RDSM
+
+    // Write the regional configuration registers (see AN230 section 3.4)
+    _set(_registers[SYSCONFIG1], RDS, true);                                // Enable RDS
+
+    // TODO: make these configurable
     _bandLow = 8750;
     _bandHigh = 10800;
     _bandSpacing = 20;
@@ -92,20 +117,11 @@ void Si470x::begin() {
     uint8_t spacing = SPACE_200KHz;
     uint8_t de = DE_75us;
 
-    _registers[SYSCONFIG2] &= ~BAND_MASK;
-    _registers[SYSCONFIG2] |= (band & 0b11) << BAND;
-    _registers[SYSCONFIG2] &= ~(SPACE_MASK);
-    _registers[SYSCONFIG2] |= (spacing & 0b11) << SPACE;
-    _registers[SYSCONFIG1] &= ~(1 << DE);
-    if (de == DE_50us) _registers[SYSCONFIG1] |= (1 << DE);
+    _set(_registers[SYSCONFIG2], BAND, BAND_MASK, band & 0b11);             // Set Band
+    _set(_registers[SYSCONFIG2], SPACE, SPACE_MASK, spacing & 0b11);        // Set Channel Spacing
+    _set(_registers[SYSCONFIG1], DE, de);                                   // Set De-emphasis
 
-    // Enable RDS
-    _registers[SYSCONFIG1] |= (1 << RDS);
-
-    // Set volume to 1
-    int volume = 1;
-    _registers[SYSCONFIG2] &= ~VOLUME_MASK;
-    _registers[SYSCONFIG2] |= (volume & 0b1111) << VOLUME;
+    _set(_registers[SYSCONFIG2], VOLUME, VOLUME_MASK, 0);                   // Set volume to 0
 
     _updateRegisters();
 }
@@ -115,15 +131,12 @@ void Si470x::setVolume(int vol) {
     if (vol > 15) vol = 15;
 
     _readRegisters();
-    _registers[SYSCONFIG2] &= ~VOLUME_MASK;
-    _registers[SYSCONFIG2] |= (vol & 0b1111) << VOLUME;
+    _set(_registers[SYSCONFIG2], VOLUME, VOLUME_MASK, vol & 0b1111);
     _updateRegisters();
 }
 
 // Channel selection sequence (see AN230 table 15)
 void Si470x::selectChannel(int freq) {
-    freq *= 10;
-
     if (freq < _bandLow) freq = _bandLow;
     if (freq > _bandHigh) freq = _bandHigh;
 
@@ -131,38 +144,58 @@ void Si470x::selectChannel(int freq) {
     int channel = (freq - _bandLow) / _bandSpacing;
 
     _readRegisters();
-    _registers[CHANNEL] &= ~CHAN_MASK;
-    _registers[CHANNEL] |= channel & 0x3FF;                 // Channel Select
-    _registers[CHANNEL] |= (1 << TUNE);                     // Set Tune bit
+    _set(_registers[CHANNEL], CHAN, CHAN_MASK, channel & 0x3FF);            // Channel Select
+    _set(_registers[CHANNEL], TUNE, true);                                  // Set Tune bit
     _updateRegisters();
 
-    while (_getSTC() == 0) delay(10);                       // Poll until STC bit is set
+    while (_getSTC() == 0) delay(10);                                       // Poll until STC bit is set
 
     // optionally, we can read ST, RSSI, and READCHAN
 
     _readRegisters();
-    _registers[CHANNEL] &= ~(1 << TUNE);                    // Clear Tune bit
+    _set(_registers[CHANNEL], TUNE, false);                                 // Clear Tune bit
     _updateRegisters();
 
-    while (_getSTC() != 0) delay(10);                       // Poll until STC bit is cleared
+    while (_getSTC() != 0) delay(10);                                       // Poll until STC bit is cleared
 }
 
 int Si470x::getPartNumber() {
-    return (_registers[DEVICEID] & PN_MASK) >> PN;
+    return _get(_registers[DEVICEID], PN, PN_MASK);
 }
 
 int Si470x::getManufacturerID() {
-    return (_registers[DEVICEID] & MFGID_MASK) >> MFGID;
+    return _get(_registers[DEVICEID], MFGID, MFGID_MASK);
 }
 
 int Si470x::getChipVersion() {
-    return (_registers[CHIPID] & REV_MASK) >> REV;
+    return _get(_registers[CHIPID], REV, REV_MASK);
 }
 
 int Si470x::getDevice() {
-    return (_registers[CHIPID] & DEV_MASK) >> DEV;
+    return _get(_registers[CHIPID], DEV, DEV_MASK);
 }
 
 int Si470x::getFirmwareVersion() {
-    return (_registers[CHIPID] & FIRMWARE_MASK) >> FIRMWARE;
+    return _get(_registers[CHIPID], FIRMWARE, FIRMWARE_MASK);
+}
+
+
+// private helper functions
+
+uint16_t Si470x::_get(uint16_t reg, uint16_t shift) {
+    return (reg & (1 << shift)) >> shift;
+}
+
+uint16_t Si470x::_get(uint16_t reg, uint16_t shift, uint16_t mask) {
+    return (reg & mask) >> shift;
+}
+
+void Si470x::_set(uint16_t& reg, uint16_t shift, bool val) {
+    if (val) reg |= (1 << shift);
+    else reg &= ~(1 << shift);
+}
+
+void Si470x::_set(uint16_t& reg, uint16_t shift, uint16_t mask, uint16_t field) {
+    reg &= ~mask;
+    if (field) reg |= (field << shift) & mask;
 }
