@@ -103,14 +103,14 @@ void Si470x::begin() {
     // SKSNR
     // SKCNT
     // RDSPRF
-    // RDSM
+    _set(_registers[POWERCFG], RDSM, 0);                                  // Set RDS Mode to Standard (default)
 
     // Write the regional configuration registers (see AN230 section 3.4)
     _set(_registers[SYSCONFIG1], RDS, true);                                // Enable RDS
 
     // TODO: make these configurable
-    _bandLow = 8750;
-    _bandHigh = 10800;
+    _bandLowerLimit = 8750;
+    _bandUpperLimit = 10800;
     _bandSpacing = 20;
 
     uint8_t band = BAND_US_EU;
@@ -126,6 +126,12 @@ void Si470x::begin() {
     _updateRegisters();
 }
 
+void Si470x::setMono(bool enabled) {
+    _readRegisters();
+    _set(_registers[POWERCFG], MONO, enabled);
+    _updateRegisters();
+}
+
 void Si470x::setVolume(int vol) {
     if (vol < 0) vol = 0;
     if (vol > 15) vol = 15;
@@ -135,28 +141,38 @@ void Si470x::setVolume(int vol) {
     _updateRegisters();
 }
 
+int Si470x::getChannel() {
+    _readRegisters();
+    // freq (MHz) = spacing * channel + start
+    return _bandSpacing * (_registers[READCHAN] & READCHAN_MASK) + _bandLowerLimit;
+}
+
 // Channel selection sequence (see AN230 table 15)
 void Si470x::selectChannel(int freq) {
-    if (freq < _bandLow) freq = _bandLow;
-    if (freq > _bandHigh) freq = _bandHigh;
+    if (freq < _bandLowerLimit) freq = _bandLowerLimit;
+    if (freq > _bandUpperLimit) freq = _bandUpperLimit;
 
-    // freq (MHz) = spacing * channel + _bandLow
-    int channel = (freq - _bandLow) / _bandSpacing;
+    // freq (MHz) = spacing * channel + start
+    int channel = (freq - _bandLowerLimit) / _bandSpacing;
 
     _readRegisters();
     _set(_registers[CHANNEL], CHAN, CHAN_MASK, channel & 0x3FF);            // Channel Select
     _set(_registers[CHANNEL], TUNE, true);                                  // Set Tune bit
     _updateRegisters();
 
+    delay(60);
     while (_getSTC() == 0) delay(10);                                       // Poll until STC bit is set
-
-    // optionally, we can read ST, RSSI, and READCHAN
 
     _readRegisters();
     _set(_registers[CHANNEL], TUNE, false);                                 // Clear Tune bit
     _updateRegisters();
 
     while (_getSTC() != 0) delay(10);                                       // Poll until STC bit is cleared
+}
+
+int Si470x::getRSSI() {
+    _readRegister0A();
+    return _get(_registers[STATUSRSSI], RSSI, RSSI_MASK);
 }
 
 int Si470x::getPartNumber() {

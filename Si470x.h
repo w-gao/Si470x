@@ -41,8 +41,11 @@ class Si470x {
     int getDevice();                    // Get the identity of device
     int getFirmwareVersion();           // Get the firmware revision
 
-    void setVolume(int vol);			// Set volume. (0 <= vol <= 15)
-    void selectChannel(int freq);		// Set channel
+    void setMono(bool enabled);         // Set mono output (false = stereo)
+    void setVolume(int vol);			      // Set volume. (0 <= vol <= 15)
+    int getChannel();                   // Get current channel
+    void selectChannel(int freq);		    // Set channel (e.g., freq = 10170 => 101.7 MHz)
+    int getRSSI();                      // Get RSSI (Received Signal Strength Indicator) in dBµV
 
   private:
     int  _pinRST;
@@ -50,8 +53,8 @@ class Si470x {
     int  _pinSCLK;
     uint16_t _registers[16]; // shadow registers
 
-    int _bandLow;
-    int _bandHigh;
+    int _bandLowerLimit;
+    int _bandUpperLimit;
     int _bandSpacing;
 
     void _readRegisters();
@@ -170,6 +173,16 @@ class Si470x {
     static const uint16_t ST = 8;                       // Stereo Indicator
     static const uint16_t RSSI = 0;                     // RSSI (Received Signal Strength Indicator)
     static const uint16_t RSSI_MASK = 0x00FF;
+
+    // Register 0x0B - Read Channel
+    static const uint16_t BLERB = 14;                   // RDS Block B Errors
+    static const uint16_t BLERB_MASK = 0xC000;
+    static const uint16_t BLERC = 12;                   // RDS Block C Errors
+    static const uint16_t BLERC_MASK = 0x3000;
+    static const uint16_t BLERD = 10;                   // RDS Block D Errors
+    static const uint16_t BLERD_MASK = 0x0C00;
+    // static const uint16_t READCHAN_ = 0;             // Read Channel
+    static const uint16_t READCHAN_MASK = 0x03FF;
 
     // GPIO values
     static const uint8_t GPIO_Z = 0b00;                 // High impedance (default)
