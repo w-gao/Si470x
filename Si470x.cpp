@@ -47,7 +47,7 @@ void Si470x::_init() {
     pinMode(_pinSDIO, OUTPUT);
 
     digitalWrite(_pinRST, LOW);                             // Keep RST pin low
-    digitalWrite(_pinSDIO, LOW);                            // Select bus mode - low SDIO indicates a 2-wire interface
+    digitalWrite(_pinSDIO, LOW);                            // Select bus mode - low SDIO = a 2-wire interface
     delay(1);                                               // Allow pins to settle
 
     digitalWrite(_pinRST, HIGH);                            // Bring Si4703 out of reset
@@ -100,10 +100,10 @@ void Si470x::begin() {
     // SMUTEA
     // VOLEXT
     // SEEKTH
-    // SKSNR
-    // SKCNT
+    _set(_registers[SYSCONFIG3], SKSNR, SKSNR_DISABLED);                    // Set Seek SNR Threshold
+    _set(_registers[SYSCONFIG3], SKCNT, SKCNT_DISABLED);                    // Set FM Impulse Detection Threshold
     // RDSPRF
-    _set(_registers[POWERCFG], RDSM, 0);                                  // Set RDS Mode to Standard (default)
+    _set(_registers[POWERCFG], RDSM, 0);                                    // Set RDS Mode to Standard (default)
 
     // Write the regional configuration registers (see AN230 section 3.4)
     _set(_registers[SYSCONFIG1], RDS, true);                                // Enable RDS
@@ -124,6 +124,7 @@ void Si470x::begin() {
     _set(_registers[SYSCONFIG2], VOLUME, VOLUME_MASK, 0);                   // Set volume to 0
 
     _updateRegisters();
+    delay(200);
 }
 
 void Si470x::setMono(bool enabled) {
@@ -161,18 +162,50 @@ void Si470x::selectChannel(int freq) {
     _updateRegisters();
 
     delay(60);
-    while (_getSTC() == 0) delay(10);                                       // Poll until STC bit is set
+    while (_getSTC() == 0) delay(1);                                        // Poll until STC bit is set
 
     _readRegisters();
     _set(_registers[CHANNEL], TUNE, false);                                 // Clear Tune bit
     _updateRegisters();
 
-    while (_getSTC() != 0) delay(10);                                       // Poll until STC bit is cleared
+    while (_getSTC() != 0) delay(1);                                        // Poll until STC bit is cleared
 }
 
 int Si470x::getRSSI() {
     _readRegister0A();
     return _get(_registers[STATUSRSSI], RSSI, RSSI_MASK);
+}
+
+int Si470x::seekUp() {
+    return _seek(SEEKUP_UP);
+}
+
+int Si470x::seekDown() {
+    return _seek(SEEKUP_DOWN);
+}
+
+// Seek up/seek down Sequence (see table 14)
+int Si470x::_seek(uint8_t dir) {
+    _readRegisters();
+    _set(_registers[POWERCFG], SKMODE, SKMODE_WRAP);                        // Wrap
+    _set(_registers[POWERCFG], SEEKUP, dir);                                // Set direction
+    _set(_registers[POWERCFG], SEEK, true);                                 // Set Seek bit
+    _updateRegisters();
+
+    while (_getSTC() == 0) delay(1);                                        // Poll until STC bit is set
+
+    _readRegisters();
+    bool sfbl = _registers[STATUSRSSI] & (1 << SF_BL);                      // Get seek status
+    _set(_registers[POWERCFG], SEEK, false);                                // Clear Seek bit
+    _updateRegisters();
+
+    while (_getSTC() != 0) delay(1);                                        // Poll until STC bit is cleared
+
+    if (sfbl) {
+        return 0;
+    }
+
+    return getChannel();
 }
 
 int Si470x::getPartNumber() {

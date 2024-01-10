@@ -29,6 +29,30 @@ static const uint8_t SMUTER_FAST = 0b01;                // Fast
 static const uint8_t SMUTER_SLOW = 0b10;                // Slow
 static const uint8_t SMUTER_SLOWEST = 0b11;             // Slowest
 
+// GPIO values
+static const uint8_t GPIO_Z = 0b00;                     // High impedance (default)
+static const uint8_t GPIO_I = 0b01;                     // GPIO1: Reserved, GPIO2: STC/RDS interrupt, GPIO3:  Mono/Stereo indicator
+static const uint8_t GPIO_Low = 0b10;                   // Low output (GND level)
+static const uint8_t GPIO_High = 0b11;                  // High output (VIO level)
+
+// Seek Direction
+static const uint8_t SEEKUP_DOWN = 0;                   // Seek down (default)
+static const uint8_t SEEKUP_UP = 1;                     // Seek up
+
+// Seek Mode
+static const uint8_t SKMODE_WRAP = 0;                   // Wrap at the upper or lower band limit and continue seeking (default)
+static const uint8_t SKMODE_STOP = 1;                   // Stop seeking at the upper or lower band limit
+
+// Seek SNR Threshold
+static const uint8_t SKSNR_DISABLED = 0b0000;           // disabled (default)
+static const uint8_t SKSNR_MIN = 0b0001;                // min (most stops)
+static const uint8_t SKSNR_MAX = 0b0111;                // max (fewest stops)
+
+// Seek FM Impulse Detection Threshold
+static const uint8_t SKCNT_DISABLED = 0b0000;           // disabled (default)
+static const uint8_t SKCNT_MIN = 0b0001;                // max (most stops)
+static const uint8_t SKCNT_MAX = 0b1111;                // min (fewest stops)
+
 
 class Si470x {
   public:
@@ -46,6 +70,8 @@ class Si470x {
     int getChannel();                   // Get current channel
     void selectChannel(int freq);		    // Set channel (e.g., freq = 10170 => 101.7 MHz)
     int getRSSI();                      // Get RSSI (Received Signal Strength Indicator) in dBµV
+    int seekUp();                       // Seek up. Returns the tuned channel or 0.
+    int seekDown();                     // Seek down. Returns the tuned channel or 0.
 
   private:
     int  _pinRST;
@@ -65,6 +91,7 @@ class Si470x {
     void _powerup();
 
     int _getSTC();
+    int _seek(uint8_t dir);
 
     uint16_t _get(uint16_t reg, uint16_t shift);
     uint16_t _get(uint16_t reg, uint16_t shift, uint16_t mask);
@@ -183,13 +210,6 @@ class Si470x {
     static const uint16_t BLERD_MASK = 0x0C00;
     // static const uint16_t READCHAN_ = 0;             // Read Channel
     static const uint16_t READCHAN_MASK = 0x03FF;
-
-    // GPIO values
-    static const uint8_t GPIO_Z = 0b00;                 // High impedance (default)
-    static const uint8_t GPIO_I = 0b01;                 // GPIO1: Reserved, GPIO2: STC/RDS interrupt, GPIO3:  Mono/Stereo indicator
-    static const uint8_t GPIO_Low = 0b10;               // Low output (GND level)
-    static const uint8_t GPIO_High = 0b11;              // High output (VIO level)
-
 };
 
 #endif
