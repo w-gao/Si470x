@@ -33,6 +33,9 @@ class Si470x
 	int getDevice();                    // Get the identity of device
 	int getFirmwareVersion();           // Get the firmware revision
 
+	void setVolume(int vol);			// Set volume. (0 <= vol <= 15)
+	void selectChannel(int freq);		// Set channel
+
   private:
     int  _pinRST;
 	int  _pinSDIO;
@@ -41,7 +44,7 @@ class Si470x
 
     int _bandLow;
     int _bandHigh;
-    int _freqSteps;
+    int _bandSpacing;
 
 	void _readRegisters();
 	void _readRegister0A();
@@ -49,6 +52,8 @@ class Si470x
 
 	void _init();
 	void _powerup();
+
+	int _getSTC();
 
 	static const int I2C_ADDR = 0x10;
 
