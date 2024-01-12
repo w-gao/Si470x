@@ -57,8 +57,10 @@ void setup() {
     Serial.println("==================================================");  
     Serial.println("+ -     Volume (max 15)");
     Serial.println("u d     Seek up / down");
+    Serial.println("f b     Forward / backward saved channels");
     Serial.println("t       Toggle mono/stereo");
-    Serial.println("r       Listen for RDS (15 sec timeout)");
+    Serial.println("i       Show Si470x device information");
+    // Serial.println("r       Listen for RDS (15 sec timeout)");
     Serial.println("==================================================");  
 
     radio.setVolume(volume);
