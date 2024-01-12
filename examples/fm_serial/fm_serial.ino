@@ -1,5 +1,10 @@
+// fm_serial.ino
+//
+// FM radio with controls from the Serial interface
+//
+// Created on Jan 10, 2024
+
 #include "Si470x.h"
-#include "RotaryEncoder.h"
 #include <Wire.h>
 
 #define PIN_RESET D2
@@ -8,23 +13,8 @@
 #define PIN_EXTERN_MUTE D3
 Si470x radio(PIN_RESET, PIN_SDIO, PIN_SCLK);
 
-// Volume control
-#define PIN_VOL_DT D5
-#define PIN_VOL_CLK D4
-#define PIN_VOL_SW D6
-
 #define VOLUME_MIN 0
 #define VOLUME_MAX 15
-
-RotaryEncoder volumeControl(PIN_VOL_DT, PIN_VOL_CLK, PIN_VOL_SW);
-
-// Channel control
-#define PIN_CHAN_DT D8
-#define PIN_CHAN_CLK D7
-#define PIN_CHAN_SW D9
-
-RotaryEncoder channelControl(PIN_CHAN_DT, PIN_CHAN_CLK, PIN_CHAN_SW);
-
 
 const int _channelCount = 48;
 int _channels[_channelCount] = {
@@ -55,10 +45,6 @@ void setup() {
   // while (!Serial) delay(10);
   delay(1000);
 
-  // set up controls
-  volumeControl.setup();
-  channelControl.setup();
-
   // set up Si470x
   Serial.println("Setting up Si470x...");
   radio.begin();
@@ -76,8 +62,6 @@ void setup() {
   radio.setVolume(volume);
   radio.setMono(mono);
   radio.setChannel(channel);
-  volumeControl.setValue(volume);
-  channelControl.setValue(_channelIndex);
 }
 
 void printDeviceInfo() {
@@ -100,7 +84,7 @@ void printDeviceInfo() {
 void printStatus() {
   // channel = radio.getChannel();
 
-  Serial.print("| Ch: ");
+  Serial.print("| Chan: ");
   Serial.print(float(channel) / 100, 2);
   Serial.print(" MHz");
 
@@ -108,7 +92,7 @@ void printStatus() {
   Serial.print(radio.getRSSI());
   Serial.print(" dBµV");
 
-  Serial.print(" | Vol:");
+  Serial.print(" | Vol: ");
   Serial.print(volume);
 
   Serial.print(" | ");
@@ -125,48 +109,6 @@ void loop() {
     printStatus();
   }
 
-  // check volume control
-  int newVolume = volumeControl.update();
-  if (newVolume < VOLUME_MIN) {
-    volumeControl.setValue(VOLUME_MIN);
-    newVolume = VOLUME_MIN;
-  }
-
-  if (newVolume > VOLUME_MAX) {
-    volumeControl.setValue(VOLUME_MAX);
-    newVolume = VOLUME_MAX;
-  }
-
-  if (volume != newVolume) {
-    volume = newVolume;
-    radio.setVolume(volume);
-    printStatus();
-  }
-
-  if (volumeControl.pressed()) {
-    radio.setMute(!radio.getMute());
-  }
-
-  // check channel control
-  int newChannelIndex = channelControl.update();
-  if (newChannelIndex < 0) {
-    channelControl.setValue(_channelCount - 1);
-    newChannelIndex = _channelCount - 1;
-  }
-
-  if (newChannelIndex > _channelCount - 1) {
-    channelControl.setValue(0);
-    newChannelIndex = 0;
-  }
-
-  if (_channelIndex != newChannelIndex) {
-    _channelIndex = newChannelIndex;
-    channel = _channels[_channelIndex];
-    radio.setChannel(channel);
-    printStatus();
-  }
-
-  // check serial input
   if (Serial.available()) {
     char ch = Serial.read();
     if (ch == 'i') {
@@ -175,13 +117,11 @@ void loop() {
       volume++;
       if (volume > 15) volume = 15;
       radio.setVolume(volume);
-      volumeControl.setValue(volume);
       printStatus();
     } else if (ch == '-') {
       volume--;
       if (volume < 0) volume = 0;
       radio.setVolume(volume);
-      volumeControl.setValue(volume);
       printStatus();
     } else if (ch == 't') {
       mono = !mono;
