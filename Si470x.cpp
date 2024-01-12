@@ -127,6 +127,17 @@ void Si470x::begin() {
     delay(200);
 }
 
+bool Si470x::getMute() {
+    _readRegisters();
+    return _get(_registers[POWERCFG], DMUTE);
+}
+
+void Si470x::setMute(bool disabled) {
+    _readRegisters();
+    _set(_registers[POWERCFG], DMUTE, disabled);
+    _updateRegisters();
+}
+
 void Si470x::setMono(bool enabled) {
     _readRegisters();
     _set(_registers[POWERCFG], MONO, enabled);
@@ -139,6 +150,7 @@ void Si470x::setVolume(int vol) {
 
     _readRegisters();
     _set(_registers[SYSCONFIG2], VOLUME, VOLUME_MASK, vol & 0b1111);
+    _set(_registers[POWERCFG], DMUTE, true);
     _updateRegisters();
 }
 
@@ -149,7 +161,7 @@ int Si470x::getChannel() {
 }
 
 // Channel selection sequence (see AN230 table 15)
-void Si470x::selectChannel(int freq) {
+int Si470x::setChannel(int freq) {
     if (freq < _bandLowerLimit) freq = _bandLowerLimit;
     if (freq > _bandUpperLimit) freq = _bandUpperLimit;
 
@@ -169,19 +181,13 @@ void Si470x::selectChannel(int freq) {
     _updateRegisters();
 
     while (_getSTC() != 0) delay(1);                                        // Poll until STC bit is cleared
+
+    return getChannel();
 }
 
 int Si470x::getRSSI() {
     _readRegister0A();
     return _get(_registers[STATUSRSSI], RSSI, RSSI_MASK);
-}
-
-int Si470x::seekUp() {
-    return _seek(SEEKUP_UP);
-}
-
-int Si470x::seekDown() {
-    return _seek(SEEKUP_DOWN);
 }
 
 // Seek up/seek down Sequence (see table 14)
@@ -206,6 +212,22 @@ int Si470x::_seek(uint8_t dir) {
     }
 
     return getChannel();
+}
+
+bool Si470x::pollRDS() {
+    unsigned long currMills = millis();
+    if (currMills - _rdsMillis < 40) {
+        // Polling too quick.
+        return false;
+    }
+    _rdsMillis = currMills;
+
+    _readRegister0A();
+    if (_registers[STATUSRSSI] & (1 << RDSR) == 0) {
+        return false;
+    }
+
+    // TODO
 }
 
 int Si470x::getPartNumber() {

@@ -59,29 +59,45 @@ class Si470x {
     Si470x(int pinRST, int pinSDIO, int pinSCLK);
     void begin();
 
-    int getPartNumber();                // Get the part number
-    int getManufacturerID();            // Get the manufacturer ID
-    int getChipVersion();               // Get the chip version (silicon revision)
-    int getDevice();                    // Get the identity of device
-    int getFirmwareVersion();           // Get the firmware revision
+    int getPartNumber();                                // Get the part number
+    int getManufacturerID();                            // Get the manufacturer ID
+    int getChipVersion();                               // Get the chip version (silicon revision)
+    int getDevice();                                    // Get the identity of device
+    int getFirmwareVersion();                           // Get the firmware revision
 
-    void setMono(bool enabled);         // Set mono output (false = stereo)
-    void setVolume(int vol);			      // Set volume. (0 <= vol <= 15)
-    int getChannel();                   // Get current channel
-    void selectChannel(int freq);		    // Set channel (e.g., freq = 10170 => 101.7 MHz)
-    int getRSSI();                      // Get RSSI (Received Signal Strength Indicator) in dBµV
-    int seekUp();                       // Seek up. Returns the tuned channel or 0.
-    int seekDown();                     // Seek down. Returns the tuned channel or 0.
+    bool getMute();                                     // Get mute status
+    void setMute(bool disabled);                        // Set mute (false = mute)
+    void setMono(bool enabled);                         // Set mono output (false = stereo)
+    void setVolume(int vol);			                      // Set volume. (0 <= vol <= 15)
+    int getChannel();                                   // Get current channel
+    int setChannel(int freq);		                        // Set channel (e.g., freq = 10170 => 101.7 MHz)
+    int getRSSI();                                      // Get RSSI (Received Signal Strength Indicator) in dBµV
+
+    // Seek up. Returns the tuned channel or 0.
+    inline int seekUp() { return _seek(SEEKUP_UP); }
+
+    // Seek down. Returns the tuned channel or 0.
+    inline int seekDown() { return _seek(SEEKUP_DOWN); }
+
+    // Increment channel by one step. Returns next channel (not necessarily tuned) or 0.
+    inline int incChannel() { return setChannel(getChannel() + _bandSpacing); }
+
+    // Decrement channel by one step. Returns previous channel (not necessarily tuned) or 0.
+    inline int decChannel() { return setChannel(getChannel() - _bandSpacing); }
+
+    bool pollRDS();                                     // Poll RDS
 
   private:
-    int  _pinRST;
-    int  _pinSDIO;
-    int  _pinSCLK;
+    int _pinRST;
+    int _pinSDIO;
+    int _pinSCLK;
     uint16_t _registers[16]; // shadow registers
 
     int _bandLowerLimit;
     int _bandUpperLimit;
     int _bandSpacing;
+
+    unsigned long _rdsMillis;
 
     void _readRegisters();
     void _readRegister0A();
