@@ -86,9 +86,10 @@ class Si470x {
     inline int decChannel() { return setChannel(getChannel() - _bandSpacing); }
 
     bool pollRDS();                                     // Poll RDS
-    uint16_t getRDSPICode();                            // Return the program identification (PI) code
-    uint8_t getPTY();                                   // Return the program type (PTY) code
-    const char* getStationName();                       // Return the station name
+    uint16_t getProgramID();                            // Return the program identification (PI) code
+    uint8_t getProgramType();                           // Return the program type (PTY) code
+    const char* getStationName();                       // Return the station name (PS)
+    const char* getRadioText();                        // Return the station name (PS)
     void readRDS(char* buffer, long timeout); /// temp
 
   private:
@@ -103,9 +104,16 @@ class Si470x {
 
     unsigned long _rdsMillis;
     // unsigned long _setChannelMillis;
-    uint16_t _rdsPICode;
-    uint8_t _pty;
-    char _stationName[9];
+    uint16_t _rdsPI;
+    uint8_t _rdsPTY;
+    char _rdsPS[9];
+    char _rdsPSBuffer[9];
+    uint8_t _rdsFlags; // set bit once read
+
+    uint8_t _rdsAB, _rdsPrevAB; // A/B flag for RT
+    uint8_t _rdsIdx;
+    char _rdsRT[64 + 2];
+    char _rdsRTBuffer[64 + 2];
 
     void _readRegisters();
     void _readRegister0A();
@@ -116,6 +124,7 @@ class Si470x {
 
     int _getSTC();
     int _seek(uint8_t dir);
+    void _resetRDS();
 
     uint16_t _get(uint16_t reg, uint16_t shift);
     uint16_t _get(uint16_t reg, uint16_t shift, uint16_t mask);

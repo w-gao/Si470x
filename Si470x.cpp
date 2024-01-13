@@ -5,9 +5,7 @@ Si470x::Si470x(int pinRST, int pinSDIO, int pinSCLK) {
     _pinRST = pinRST;
     _pinSDIO = pinSDIO;
     _pinSCLK = pinSCLK;
-
-    _rdsPICode = 0;
-    _stationName[0] = '\0';
+    _resetRDS();
 }
 
 void Si470x::_readRegisters() {
@@ -184,8 +182,8 @@ int Si470x::setChannel(int freq) {
 
     while (_getSTC() != 0) delay(1);                                        // Poll until STC bit is cleared
 
-    _rdsPICode = 0;
-    _stationName[0] = '\0';
+    _rdsPI = 0;
+    _rdsPS[0] = '\0';
 
     return getChannel();
 }
@@ -216,10 +214,23 @@ int Si470x::_seek(uint8_t dir) {
         return 0;
     }
 
-    _rdsPICode = 0;
-    _stationName[0] = '\0';
+    _rdsPI = 0;
+    _rdsPS[0] = '\0';
 
     return getChannel();
+}
+
+void Si470x::_resetRDS() {
+    _rdsPI = 0;
+    _rdsPTY = 0;
+    _rdsPS[0] = '\0';
+    _rdsPSBuffer[0] = '\0';
+    _rdsFlags = 0;
+    _rdsAB = 0;
+    _rdsPrevAB = 0;
+    _rdsIdx = 0;
+    _rdsRT[0] = '\0';
+    _rdsRTBuffer[0] = '\0';
 }
 
 // RDS sequence (see table 16)
@@ -243,7 +254,7 @@ bool Si470x::pollRDS() {
 
     uint8_t errA = _get(_registers[STATUSRSSI], BLERA, BLERA_MASK);
     if (errA < 3) {
-        _rdsPICode = blockA;
+        _rdsPI = blockA;
     }
 
     uint8_t errB = _get(_registers[READCHAN], BLERB, BLERB_MASK);
@@ -251,36 +262,69 @@ bool Si470x::pollRDS() {
         return false;
     }
 
-    uint8_t _pty = (blockB & 0x03E0) >> 5;
+    uint8_t _rdsPTY = (blockB & 0x03E0) >> 5;
     uint8_t errD = _get(_registers[READCHAN], BLERD, BLERD_MASK);
 
     uint16_t groupType = 0x0A | (blockB & 0xF000) >> 8 | (blockB & 0x0800) >> 11;
     switch (groupType) {
+        // PS
         case 0x0A:
         case 0x0B: {
             if (errD >= 3) break;
             uint8_t idx = 2 * (blockB & 0b11);
-            _stationName[idx] = blockD >> 8;
-            _stationName[idx + 1] = blockD & 0x00FF;
+            _rdsPSBuffer[idx] = blockD >> 8;
+            _rdsPSBuffer[idx + 1] = blockD & 0x00FF;
+
+            _rdsFlags |= 1 << (blockB & 0b11);
+            if (_rdsFlags == 0b1111) {
+                strcpy(_rdsPS, _rdsPSBuffer);
+                _rdsFlags = 0;
+            }
+            break;
+        }
+
+        // RT
+        case 0x2A: {
+            _rdsAB = (blockB & 0x0010);
+            uint8_t idx = 4 * (blockB & 0x000F);
+            if (idx < _rdsIdx) {
+                strcpy(_rdsRT, _rdsRTBuffer);
+            }
+
+            _rdsIdx = idx;
+            if (_rdsAB != _rdsPrevAB) {
+                _rdsPrevAB = _rdsAB;
+                _rdsRTBuffer[0] = '\0';
+            }
+
+            _rdsRTBuffer[idx++] = (blockC >> 8);
+            _rdsRTBuffer[idx++] = (blockC & 0x00FF);
+            _rdsRTBuffer[idx++] = (blockD >> 8);
+            _rdsRTBuffer[idx++] = (blockD & 0x00FF);
             break;
         }
         default:
+            if (Serial) Serial.println(groupType, HEX);
             break;
     }
 
     return true;
 }
 
-uint16_t Si470x::getRDSPICode() {
-    return _rdsPICode;
+uint16_t Si470x::getProgramID() {
+    return _rdsPI;
 }
 
-uint8_t Si470x::getPTY() {
-    return _pty;
+uint8_t Si470x::getProgramType() {
+    return _rdsPTY;
 }
 
 const char* Si470x::getStationName() {
-    return _stationName;
+    return _rdsPS;
+}
+
+const char* Si470x::getRadioText() {
+    return _rdsRT;
 }
 
 void Si470x::readRDS(char* buffer, long timeout) {
