@@ -5,6 +5,9 @@ Si470x::Si470x(int pinRST, int pinSDIO, int pinSCLK) {
     _pinRST = pinRST;
     _pinSDIO = pinSDIO;
     _pinSCLK = pinSCLK;
+
+    _rdsPICode = 0;
+    _stationName[0] = '\0';
 }
 
 void Si470x::_readRegisters() {
@@ -182,6 +185,9 @@ int Si470x::setChannel(int freq) {
 
     while (_getSTC() != 0) delay(1);                                        // Poll until STC bit is cleared
 
+    _rdsPICode = 0;
+    _stationName[0] = '\0';
+
     return getChannel();
 }
 
@@ -211,6 +217,9 @@ int Si470x::_seek(uint8_t dir) {
         return 0;
     }
 
+    _rdsPICode = 0;
+    _stationName[0] = '\0';
+
     return getChannel();
 }
 
@@ -222,12 +231,40 @@ bool Si470x::pollRDS() {
     }
     _rdsMillis = currMills;
 
-    _readRegister0A();
+    _readRegisters();
     if (_registers[STATUSRSSI] & (1 << RDSR) == 0) {
         return false;
     }
 
-    // TODO
+    uint16_t blockA = _registers[RDSA];
+    uint16_t blockB = _registers[RDSB];
+    uint16_t blockC = _registers[RDSC];
+    uint16_t blockD = _registers[RDSD];
+
+    _rdsPICode = blockA;
+
+    uint16_t groupType = 0x0A | ((blockB & 0xF000) >> 8) | ((blockB & 0x0800) >> 11);
+    switch (groupType) {
+        case 0x0A:
+        case 0x0B: {
+            uint8_t idx = 2 * (blockB & 0x0003);
+            _stationName[idx] = blockD >> 8;
+            _stationName[idx + 1] = blockD & 0x00FF;
+            break;
+        }
+        default:
+            break;
+    }
+
+    return true;
+}
+
+uint16_t Si470x::getRDSPICode() {
+    return _rdsPICode;
+}
+
+const char* Si470x::getStationName() {
+    return _stationName;
 }
 
 int Si470x::getPartNumber() {

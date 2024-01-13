@@ -86,6 +86,8 @@ class Si470x {
     inline int decChannel() { return setChannel(getChannel() - _bandSpacing); }
 
     bool pollRDS();                                     // Poll RDS
+    uint16_t getRDSPICode();                            // Return the program identification (PI) code
+    const char* getStationName();                       // Return the station name
 
   private:
     int _pinRST;
@@ -98,6 +100,12 @@ class Si470x {
     int _bandSpacing;
 
     unsigned long _rdsMillis;
+    // unsigned long _setChannelMillis;
+    uint16_t _rdsPICode;
+    char _stationName[9];
+    // char _stationNameA[9];
+    // char _stationNameB[9];
+    // char _stationNameC[9];
 
     void _readRegisters();
     void _readRegister0A();

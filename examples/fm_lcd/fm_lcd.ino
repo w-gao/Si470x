@@ -59,10 +59,15 @@ int _channelIndex = 32; // 101.7 MHz
 int volume = 8;
 int channel = _channels[_channelIndex];
 bool mono = false;
+bool enableRDS = true;
 
 unsigned long _statusMillis = 0;
 const long _statusInterval = 2000;
 int _rssi;
+
+const char *_stationName;
+char _rdsBuffer[10];
+
 
 void setup() {
     pinMode(PIN_EXTERN_MUTE, OUTPUT);
@@ -143,26 +148,39 @@ void printStatus() {
 
     Serial.print(" | ");
     Serial.print(mono ? "Mono" : "Stereo");
+
+    Serial.print(" | PI code: 0x");
+    Serial.print(radio.getRDSPICode(), HEX);
+
+    Serial.print(" | Station name: ");
+    Serial.print(radio.getStationName());
+
     Serial.println();
 }
 
 void updateLCD() {
-    // TODO: only update what is required
     u8g2.clearBuffer();
+
     u8g2.setCursor(0, 12);
     u8g2.print("Chan: ");
     u8g2.print(float(channel) / 100, 2);
     u8g2.print(" MHz");
+
     u8g2.setCursor(0, 24);
     u8g2.print("RSSI: ");
     u8g2.print(_rssi);
     u8g2.print(" dBuV");
+
     u8g2.setCursor(0, 36);
     u8g2.print("Vol:  ");
     u8g2.print(volume);
     u8g2.print(" (");
     u8g2.print(mono ? "Mono" : "Stereo");
     u8g2.println(")");
+
+    u8g2.setCursor(0, 48);
+    if (enableRDS) u8g2.print(radio.getStationName());
+
     u8g2.sendBuffer();
 }
 
@@ -219,6 +237,10 @@ void loop() {
         printStatus();
     }
 
+    if (channelControl.pressed()) {
+        enableRDS = !enableRDS;
+    }
+
     // check serial input
     if (Serial.available()) {
         char ch = Serial.read();
@@ -257,5 +279,10 @@ void loop() {
             radio.setChannel(channel);
             printStatus();
         }
+    }
+
+    // poll RDS
+    if (enableRDS && radio.pollRDS()) {
+        // true = we got something
     }
 }
