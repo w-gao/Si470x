@@ -105,8 +105,7 @@ void Si470x::begin() {
     // SEEKTH
     _set(_registers[SYSCONFIG3], SKSNR, SKSNR_DISABLED);                    // Set Seek SNR Threshold
     _set(_registers[SYSCONFIG3], SKCNT, SKCNT_DISABLED);                    // Set FM Impulse Detection Threshold
-    // RDSPRF
-    _set(_registers[POWERCFG], RDSM, 0);                                    // Set RDS Mode to Standard (default)
+    _set(_registers[POWERCFG], RDSM, 1);                                    // Set RDS Mode to Verbose
 
     // Write the regional configuration registers (see AN230 section 3.4)
     _set(_registers[SYSCONFIG1], RDS, true);                                // Enable RDS
@@ -223,6 +222,7 @@ int Si470x::_seek(uint8_t dir) {
     return getChannel();
 }
 
+// RDS sequence (see table 16)
 bool Si470x::pollRDS() {
     unsigned long currMills = millis();
     if (currMills - _rdsMillis < 40) {
@@ -241,15 +241,25 @@ bool Si470x::pollRDS() {
     uint16_t blockC = _registers[RDSC];
     uint16_t blockD = _registers[RDSD];
 
-    _rdsPICode = blockA;
+    uint8_t errA = _get(_registers[STATUSRSSI], BLERA, BLERA_MASK);
+    if (errA < 3) {
+        _rdsPICode = blockA;
+    }
 
-    uint16_t groupType = 0x0A | ((blockB & 0xF000) >> 8) | ((blockB & 0x0800) >> 11);
+    uint8_t errB = _get(_registers[READCHAN], BLERB, BLERB_MASK);
+    if (errB > 2) {
+        return false;
+    }
+
+    uint8_t _pty = (blockB & 0x03E0) >> 5;
+    uint8_t errD = _get(_registers[READCHAN], BLERD, BLERD_MASK);
+
+    uint16_t groupType = 0x0A | (blockB & 0xF000) >> 8 | (blockB & 0x0800) >> 11;
     switch (groupType) {
         case 0x0A:
         case 0x0B: {
-            uint8_t idx = 2 * (blockB & 0x0003);
-            _stationName[idx] = blockD >> 8;
-            _stationName[idx + 1] = blockD & 0x00FF;
+            if (errD >= 3) break;
+            _processStationName(blockB, blockD);
             break;
         }
         default:
@@ -263,8 +273,66 @@ uint16_t Si470x::getRDSPICode() {
     return _rdsPICode;
 }
 
+uint8_t Si470x::getPTY() {
+    return _pty;
+}
+
 const char* Si470x::getStationName() {
     return _stationName;
+}
+
+void Si470x::_processStationName(uint16_t blockB, uint16_t blockD) {
+    uint8_t idx = 2 * (blockB & 0b11);
+
+    _stationNameC[idx] = _stationNameB[idx];
+    _stationNameC[idx + 1] = _stationNameB[idx + 1];
+    _stationNameB[idx] = _stationNameA[idx];
+    _stationNameB[idx + 1] = _stationNameA[idx + 1];
+    _stationNameA[idx] = blockD >> 8;
+    _stationNameA[idx + 1] = blockD & 0x00FF;
+
+    if (idx != 6) {
+        return;
+    }
+
+    for (int n = 0; n < 8; n++) {
+        if ((_stationNameA[n] == _stationNameB[n]) || (_stationNameA[n] == _stationNameC[n])) {
+            _stationName[n] = _stationNameA[n];
+        } else if (_stationNameB[n] == _stationNameC[n]) {
+            _stationName[n] = _stationNameB[n];
+        } else {
+            _stationName[n] = '#';
+        }
+    }
+}
+
+void Si470x::readRDS(char* buffer, long timeout) {
+    long endTime = millis() + timeout;
+    bool completed[] = {false, false, false, false};
+    int completedCount = 0;
+    while(completedCount < 4 && millis() < endTime) {
+        _readRegisters();
+        if(_registers[STATUSRSSI] & (1<<RDSR)) {
+            uint16_t b = _registers[RDSB];
+            int index = b & 0x03;
+            if (! completed[index] && b < 500) {
+                completed[index] = true;
+                completedCount++;
+                char Dh = (_registers[RDSD] & 0xFF00) >> 8;
+                char Dl = (_registers[RDSD] & 0x00FF);
+                buffer[index * 2] = Dh;
+                buffer[index * 2 + 1] = Dl;
+            }
+            delay(40);
+        } else {
+            delay(30);
+        }
+    }
+    if (millis() >= endTime) {
+        buffer[0] ='\0';
+        return;
+    }
+    buffer[8] = '\0';
 }
 
 int Si470x::getPartNumber() {
