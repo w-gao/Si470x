@@ -66,7 +66,7 @@ const long _statusInterval = 2000;
 int _rssi;
 
 const char *_radioText;
-u8g2_uint_t _radioTextWidth;
+// u8g2_uint_t _radioTextWidth;
 unsigned long _radioTextMillis = 0;
 const long _radioTextInterval = 5000;
 
@@ -153,6 +153,9 @@ void printStatus() {
     Serial.print(" | PI code: 0x");
     Serial.print(radio.getProgramID(), HEX);
 
+    Serial.print(" | PS: ");
+    Serial.print(radio.getStationName());
+
     Serial.print(" | RT: ");
     Serial.print(radio.getRadioText());
 
@@ -182,8 +185,8 @@ void updateLCD() {
     u8g2.setCursor(0, 48);
     if (enableRDS) u8g2.print(radio.getStationName());
 
-    u8g2.setCursor(0, 64);
-    if (enableRDS) u8g2.print(radio.getRadioText());
+    // u8g2.setCursor(0, 64);
+    // if (enableRDS) u8g2.print(radio.getRadioText());
 
     u8g2.sendBuffer();
 }
@@ -203,7 +206,7 @@ void loop() {
     // poll radio text
     if (currentMillis - _radioTextMillis >= _radioTextInterval) {
         _radioText = radio.getRadioText();
-        _radioTextWidth = u8g2.getUTF8Width(_radioText);
+        // _radioTextWidth = u8g2.getUTF8Width(_radioText);
         _radioTextMillis = currentMillis;
     }
 

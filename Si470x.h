@@ -107,8 +107,6 @@ class Si470x {
     uint16_t _rdsPI;
     uint8_t _rdsPTY;
     char _rdsPS[9];
-    char _rdsPSBuffer[9];
-    uint8_t _rdsFlags; // set bit once read
 
     uint8_t _rdsAB, _rdsPrevAB; // A/B flag for RT
     uint8_t _rdsIdx;

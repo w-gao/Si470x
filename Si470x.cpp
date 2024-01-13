@@ -224,8 +224,6 @@ void Si470x::_resetRDS() {
     _rdsPI = 0;
     _rdsPTY = 0;
     _rdsPS[0] = '\0';
-    _rdsPSBuffer[0] = '\0';
-    _rdsFlags = 0;
     _rdsAB = 0;
     _rdsPrevAB = 0;
     _rdsIdx = 0;
@@ -272,14 +270,8 @@ bool Si470x::pollRDS() {
         case 0x0B: {
             if (errD >= 3) break;
             uint8_t idx = 2 * (blockB & 0b11);
-            _rdsPSBuffer[idx] = blockD >> 8;
-            _rdsPSBuffer[idx + 1] = blockD & 0x00FF;
-
-            _rdsFlags |= 1 << (blockB & 0b11);
-            if (_rdsFlags == 0b1111) {
-                strcpy(_rdsPS, _rdsPSBuffer);
-                _rdsFlags = 0;
-            }
+            _rdsPS[idx] = blockD >> 8;
+            _rdsPS[idx + 1] = blockD & 0x00FF;
             break;
         }
 
@@ -304,7 +296,6 @@ bool Si470x::pollRDS() {
             break;
         }
         default:
-            if (Serial) Serial.println(groupType, HEX);
             break;
     }
 
