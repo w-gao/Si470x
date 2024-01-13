@@ -106,9 +106,6 @@ class Si470x {
     uint16_t _rdsPICode;
     uint8_t _pty;
     char _stationName[9];
-    char _stationNameA[9];
-    char _stationNameB[9];
-    char _stationNameC[9];
 
     void _readRegisters();
     void _readRegister0A();
@@ -119,9 +116,6 @@ class Si470x {
 
     int _getSTC();
     int _seek(uint8_t dir);
-
-    // RDS
-    void _processStationName(uint16_t blockB, uint16_t blockD);
 
     uint16_t _get(uint16_t reg, uint16_t shift);
     uint16_t _get(uint16_t reg, uint16_t shift, uint16_t mask);

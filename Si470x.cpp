@@ -259,7 +259,9 @@ bool Si470x::pollRDS() {
         case 0x0A:
         case 0x0B: {
             if (errD >= 3) break;
-            _processStationName(blockB, blockD);
+            uint8_t idx = 2 * (blockB & 0b11);
+            _stationName[idx] = blockD >> 8;
+            _stationName[idx + 1] = blockD & 0x00FF;
             break;
         }
         default:
@@ -279,31 +281,6 @@ uint8_t Si470x::getPTY() {
 
 const char* Si470x::getStationName() {
     return _stationName;
-}
-
-void Si470x::_processStationName(uint16_t blockB, uint16_t blockD) {
-    uint8_t idx = 2 * (blockB & 0b11);
-
-    _stationNameC[idx] = _stationNameB[idx];
-    _stationNameC[idx + 1] = _stationNameB[idx + 1];
-    _stationNameB[idx] = _stationNameA[idx];
-    _stationNameB[idx + 1] = _stationNameA[idx + 1];
-    _stationNameA[idx] = blockD >> 8;
-    _stationNameA[idx + 1] = blockD & 0x00FF;
-
-    if (idx != 6) {
-        return;
-    }
-
-    for (int n = 0; n < 8; n++) {
-        if ((_stationNameA[n] == _stationNameB[n]) || (_stationNameA[n] == _stationNameC[n])) {
-            _stationName[n] = _stationNameA[n];
-        } else if (_stationNameB[n] == _stationNameC[n]) {
-            _stationName[n] = _stationNameB[n];
-        } else {
-            _stationName[n] = '#';
-        }
-    }
 }
 
 void Si470x::readRDS(char* buffer, long timeout) {
