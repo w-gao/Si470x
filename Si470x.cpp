@@ -1,10 +1,17 @@
 #include "Si470x.h"
 #include "Wire.h"
 
-Si470x::Si470x(int pinRST, int pinSDIO, int pinSCLK) {
+Si470x::Si470x(int pinRST, int pinSDIO, int pinSCLK, bool usingINT) {
     _pinRST = pinRST;
     _pinSDIO = pinSDIO;
     _pinSCLK = pinSCLK;
+    _usingINT = usingINT;
+    _streamRDS = false;
+    _resetRDS();
+}
+
+void Si470x::streamRDS(bool streamRDS) {
+    _streamRDS = streamRDS;
     _resetRDS();
 }
 
@@ -89,9 +96,9 @@ void Si470x::begin() {
     // Write remaining hardware configuration registers
     _set(_registers[TEST1], AHIZEN, 0);                                     // Disable Audio High-Z (default)
     _set(_registers[SYSCONFIG1], GPIO1, GPIO1_MASK, GPIO_Z);                // Clear GPIO1 bits - High impedance (default)
-    _set(_registers[SYSCONFIG1], GPIO2, GPIO2_MASK, GPIO_Z);                // Clear GPIO2 bits - High impedance (default)
+    _set(_registers[SYSCONFIG1], GPIO2, GPIO2_MASK, _usingINT ? GPIO_I : GPIO_Z);   // Set RDS Interrupt
     _set(_registers[SYSCONFIG1], GPIO3, GPIO3_MASK, GPIO_Z);                // Clear GPIO3 bits - High impedance (default)
-    _set(_registers[SYSCONFIG1], RDSIEN, 0);                                // Disable RDS Interrupt (default)
+    _set(_registers[SYSCONFIG1], RDSIEN, _usingINT ? 1 : 0);                // Set RDS Interrupt
     _set(_registers[SYSCONFIG1], STCIEN, 0);                                // Disable Seek/Tune Complete Interrupt (default)
 
     // Write the general configuration registers 
@@ -182,8 +189,7 @@ int Si470x::setChannel(int freq) {
 
     while (_getSTC() != 0) delay(1);                                        // Poll until STC bit is cleared
 
-    _rdsPI = 0;
-    _rdsPS[0] = '\0';
+    _resetRDS();
 
     return getChannel();
 }
@@ -214,8 +220,7 @@ int Si470x::_seek(uint8_t dir) {
         return 0;
     }
 
-    _rdsPI = 0;
-    _rdsPS[0] = '\0';
+    _resetRDS();
 
     return getChannel();
 }
@@ -223,16 +228,26 @@ int Si470x::_seek(uint8_t dir) {
 void Si470x::_resetRDS() {
     _rdsPI = 0;
     _rdsPTY = 0;
+
+    // PS
+    _rdsRecvSegments = 0;
     _rdsPS[0] = '\0';
-    _rdsAB = 0;
-    _rdsPrevAB = 0;
+    memset(_rdsPS, '\0', 8);
+    memset(_rdsPS1, '\0', 8);
+    memset(_rdsPS2, '\0', 8);
+    memset(_rdsPS3, '\0', 8);
+    // memset(_rdsPSBuffer, '\0', 8);
+
+    // RT
+    _rdsABFlag = 0;
+    _rdsPrevABFlag = 0;
     _rdsIdx = 0;
-    _rdsRT[0] = '\0';
-    _rdsRTBuffer[0] = '\0';
+    memset(_rdsRT, '\0', 64);
+    memset(_rdsRTBuffer, '\0', 64);
 }
 
 // RDS sequence (see table 16)
-bool Si470x::pollRDS() {
+bool Si470x::checkRDS() {
     unsigned long currMills = millis();
     if (currMills - _rdsMillis < 40) {
         // Polling too quick.
@@ -265,28 +280,52 @@ bool Si470x::pollRDS() {
 
     uint16_t groupType = 0x0A | (blockB & 0xF000) >> 8 | (blockB & 0x0800) >> 11;
     switch (groupType) {
-        // PS
         case 0x0A:
         case 0x0B: {
             if (errD >= 3) break;
             uint8_t idx = 2 * (blockB & 0b11);
-            _rdsPS[idx] = blockD >> 8;
-            _rdsPS[idx + 1] = blockD & 0x00FF;
+
+            if (_streamRDS) {
+                _rdsPS[idx] = blockD >> 8;
+                _rdsPS[idx + 1] = blockD & 0x00FF;
+                break;
+            }
+
+            _rdsPS3[idx] = _rdsPS2[idx];
+            _rdsPS3[idx + 1] = _rdsPS2[idx + 1];
+            _rdsPS2[idx] = _rdsPS1[idx];
+            _rdsPS2[idx + 1] = _rdsPS1[idx + 1];
+            _rdsPS1[idx] = blockD >> 8;
+            _rdsPS1[idx + 1] = blockD & 0x00FF;
+
+            if (idx == 6) {
+                if (strcmp(_rdsPS1, _rdsPS2) == 0 || strcmp(_rdsPS1, _rdsPS3) == 0) {
+                    strcpy(_rdsPS, _rdsPS1);
+                } else if (strcmp(_rdsPS2, _rdsPS3) == 0) {
+                    strcpy(_rdsPS, _rdsPS2);
+                }
+            }
+
+            // Serial.print(idx);
+            // Serial.print(":");
+            // Serial.print((char) (blockD >> 8));
+            // Serial.print((char) (blockD & 0x00FF));
+            // Serial.println();
+
             break;
         }
 
-        // RT
         case 0x2A: {
-            _rdsAB = (blockB & 0x0010);
+            _rdsABFlag = (blockB & 0x0010);
             uint8_t idx = 4 * (blockB & 0x000F);
             if (idx < _rdsIdx) {
                 strcpy(_rdsRT, _rdsRTBuffer);
             }
-
             _rdsIdx = idx;
-            if (_rdsAB != _rdsPrevAB) {
-                _rdsPrevAB = _rdsAB;
-                _rdsRTBuffer[0] = '\0';
+
+            if (_rdsABFlag != _rdsPrevABFlag) {
+                _rdsPrevABFlag = _rdsABFlag;
+                memset(_rdsRTBuffer, '\0', 64);
             }
 
             _rdsRTBuffer[idx++] = (blockC >> 8);
@@ -316,35 +355,6 @@ const char* Si470x::getStationName() {
 
 const char* Si470x::getRadioText() {
     return _rdsRT;
-}
-
-void Si470x::readRDS(char* buffer, long timeout) {
-    long endTime = millis() + timeout;
-    bool completed[] = {false, false, false, false};
-    int completedCount = 0;
-    while(completedCount < 4 && millis() < endTime) {
-        _readRegisters();
-        if(_registers[STATUSRSSI] & (1<<RDSR)) {
-            uint16_t b = _registers[RDSB];
-            int index = b & 0x03;
-            if (! completed[index] && b < 500) {
-                completed[index] = true;
-                completedCount++;
-                char Dh = (_registers[RDSD] & 0xFF00) >> 8;
-                char Dl = (_registers[RDSD] & 0x00FF);
-                buffer[index * 2] = Dh;
-                buffer[index * 2 + 1] = Dl;
-            }
-            delay(40);
-        } else {
-            delay(30);
-        }
-    }
-    if (millis() >= endTime) {
-        buffer[0] ='\0';
-        return;
-    }
-    buffer[8] = '\0';
 }
 
 int Si470x::getPartNumber() {

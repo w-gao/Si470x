@@ -32,8 +32,8 @@ static const uint8_t SMUTER_SLOWEST = 0b11;             // Slowest
 // GPIO values
 static const uint8_t GPIO_Z = 0b00;                     // High impedance (default)
 static const uint8_t GPIO_I = 0b01;                     // GPIO1: Reserved, GPIO2: STC/RDS interrupt, GPIO3:  Mono/Stereo indicator
-static const uint8_t GPIO_Low = 0b10;                   // Low output (GND level)
-static const uint8_t GPIO_High = 0b11;                  // High output (VIO level)
+static const uint8_t GPIO_LOW = 0b10;                   // Low output (GND level)
+static const uint8_t GPIO_HIGH = 0b11;                  // High output (VIO level)
 
 // Seek Direction
 static const uint8_t SEEKUP_DOWN = 0;                   // Seek down (default)
@@ -56,8 +56,9 @@ static const uint8_t SKCNT_MAX = 0b1111;                // min (fewest stops)
 
 class Si470x {
   public:
-    Si470x(int pinRST, int pinSDIO, int pinSCLK);
+    Si470x(int pinRST, int pinSDIO, int pinSCLK, bool usingINT);
     void begin();
+    void streamRDS(bool streamRDS);
 
     int getPartNumber();                                // Get the part number
     int getManufacturerID();                            // Get the manufacturer ID
@@ -85,17 +86,15 @@ class Si470x {
     // Decrement channel by one step. Returns previous channel (not necessarily tuned) or 0.
     inline int decChannel() { return setChannel(getChannel() - _bandSpacing); }
 
-    bool pollRDS();                                     // Poll RDS
+    bool checkRDS();                                    // Check RDS
     uint16_t getProgramID();                            // Return the program identification (PI) code
     uint8_t getProgramType();                           // Return the program type (PTY) code
     const char* getStationName();                       // Return the station name (PS)
     const char* getRadioText();                        // Return the station name (PS)
-    void readRDS(char* buffer, long timeout); /// temp
 
   private:
-    int _pinRST;
-    int _pinSDIO;
-    int _pinSCLK;
+    int _pinRST, _pinSDIO, _pinSCLK;
+    bool _usingINT, _streamRDS;
     uint16_t _registers[16]; // shadow registers
 
     int _bandLowerLimit;
@@ -103,15 +102,16 @@ class Si470x {
     int _bandSpacing;
 
     unsigned long _rdsMillis;
-    // unsigned long _setChannelMillis;
     uint16_t _rdsPI;
     uint8_t _rdsPTY;
+    uint8_t _rdsRecvSegments;
     char _rdsPS[9];
+    char _rdsPS1[9], _rdsPS2[9], _rdsPS3[9];
 
-    uint8_t _rdsAB, _rdsPrevAB; // A/B flag for RT
+    uint8_t _rdsABFlag, _rdsPrevABFlag;
     uint8_t _rdsIdx;
-    char _rdsRT[64 + 2];
-    char _rdsRTBuffer[64 + 2];
+    char _rdsRT[65];
+    char _rdsRTBuffer[65];
 
     void _readRegisters();
     void _readRegister0A();
@@ -123,7 +123,7 @@ class Si470x {
     int _getSTC();
     int _seek(uint8_t dir);
     void _resetRDS();
-
+    
     uint16_t _get(uint16_t reg, uint16_t shift);
     uint16_t _get(uint16_t reg, uint16_t shift, uint16_t mask);
     void _set(uint16_t& reg, uint16_t shift, bool val);

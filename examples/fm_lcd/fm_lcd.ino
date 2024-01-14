@@ -10,16 +10,20 @@
 #include "Si470x.h"
 #include "RotaryEncoder.h"
 
+// Si470x
+// SDIO --> A4 (I2C)
+// SCLK --> A5 (I2C)
 #define PIN_RESET D2
 #define PIN_SDIO A4
 #define PIN_SCLK A5
+#define PIN_GPIO2 A6
 #define PIN_EXTERN_MUTE D3
-Si470x radio(PIN_RESET, PIN_SDIO, PIN_SCLK);
+Si470x radio(PIN_RESET, PIN_SDIO, PIN_SCLK, /* usingINT = */ true);
 
 // Volume control
 #define PIN_VOL_DT D5
-#define PIN_VOL_CLK D4
-#define PIN_VOL_SW D6
+#define PIN_VOL_CLK D6
+#define PIN_VOL_SW D4
 
 #define VOLUME_MIN 0
 #define VOLUME_MAX 15
@@ -28,13 +32,13 @@ RotaryEncoder volumeControl(PIN_VOL_DT, PIN_VOL_CLK, PIN_VOL_SW);
 
 // Channel control
 #define PIN_CHAN_DT D8
-#define PIN_CHAN_CLK D7
-#define PIN_CHAN_SW D9
+#define PIN_CHAN_CLK D9
+#define PIN_CHAN_SW D7
 
 RotaryEncoder channelControl(PIN_CHAN_DT, PIN_CHAN_CLK, PIN_CHAN_SW);
 
 // LCD screen
-// SCK --> clock
+// SCK --> clock/D13
 // SDA --> COPI/D11
 // RES --> reset
 // DC --> CIPO/D12
@@ -56,13 +60,14 @@ int _channelIndex = 32; // 101.7 MHz
 // int _channelIndex = 1; // 101.7 MHz
 
 
-int volume = 8;
+int volume = 5;
 int channel = _channels[_channelIndex];
 bool mono = false;
 bool enableRDS = true;
+bool streamRDS = false;
 
 unsigned long _statusMillis = 0;
-const long _statusInterval = 2000;
+const long _statusInterval = 1000;
 int _rssi;
 
 const char *_radioText;
@@ -70,6 +75,11 @@ const char *_radioText;
 unsigned long _radioTextMillis = 0;
 const long _radioTextInterval = 5000;
 
+volatile bool _rdsReady = false;
+
+void interruptHandler() {
+    _rdsReady = true;
+}
 
 void setup() {
     pinMode(PIN_EXTERN_MUTE, OUTPUT);
@@ -112,6 +122,9 @@ void setup() {
     channelControl.setValue(_channelIndex);
 
     updateLCD();
+
+    pinMode(PIN_GPIO2, INPUT_PULLUP);
+    attachInterrupt(PIN_GPIO2, interruptHandler, FALLING);
 }
 
 void printDeviceInfo() {
@@ -183,9 +196,15 @@ void updateLCD() {
     u8g2.println(")");
 
     u8g2.setCursor(0, 48);
-    if (enableRDS) u8g2.print(radio.getStationName());
+    if (enableRDS) {
+        u8g2.print(radio.getStationName());
 
-    // u8g2.setCursor(0, 64);
+        u8g2.setCursor(50, 48);
+        if (streamRDS) {
+            u8g2.print("*");
+        }
+    }
+
     // if (enableRDS) u8g2.print(radio.getRadioText());
 
     u8g2.sendBuffer();
@@ -252,7 +271,10 @@ void loop() {
     }
 
     if (channelControl.pressed()) {
-        enableRDS = !enableRDS;
+        // enableRDS = !enableRDS;
+        streamRDS = !streamRDS;
+        radio.streamRDS(streamRDS);
+        printStatus();
     }
 
     // check serial input
@@ -296,7 +318,8 @@ void loop() {
     }
 
     // poll RDS
-    if (enableRDS && radio.pollRDS()) {
-        // true = we got something
+    if (enableRDS && _rdsReady) {
+        _rdsReady = false;
+        radio.checkRDS();
     }
 }
