@@ -1,11 +1,11 @@
 #include "Si470x.h"
 #include "Wire.h"
 
-Si470x::Si470x(int pinRST, int pinSDIO, int pinSCLK, bool usingINT) {
+Si470x::Si470x(int pinRST, int pinSDIO, int pinSCLK, bool enableInterrupts) {
     _pinRST = pinRST;
     _pinSDIO = pinSDIO;
     _pinSCLK = pinSCLK;
-    _usingINT = usingINT;
+    _enableInterrupts = enableInterrupts;
     _streamRDS = false;
     _resetRDS();
 }
@@ -96,9 +96,9 @@ void Si470x::begin() {
     // Write remaining hardware configuration registers
     _set(_registers[TEST1], AHIZEN, 0);                                     // Disable Audio High-Z (default)
     _set(_registers[SYSCONFIG1], GPIO1, GPIO1_MASK, GPIO_Z);                // Clear GPIO1 bits - High impedance (default)
-    _set(_registers[SYSCONFIG1], GPIO2, GPIO2_MASK, _usingINT ? GPIO_I : GPIO_Z);   // Set RDS Interrupt
+    _set(_registers[SYSCONFIG1], GPIO2, GPIO2_MASK, _enableInterrupts ? GPIO_I : GPIO_Z);   // Set RDS Interrupt
     _set(_registers[SYSCONFIG1], GPIO3, GPIO3_MASK, GPIO_Z);                // Clear GPIO3 bits - High impedance (default)
-    _set(_registers[SYSCONFIG1], RDSIEN, _usingINT ? 1 : 0);                // Set RDS Interrupt
+    _set(_registers[SYSCONFIG1], RDSIEN, _enableInterrupts ? 1 : 0);        // Set RDS Interrupt
     _set(_registers[SYSCONFIG1], STCIEN, 0);                                // Disable Seek/Tune Complete Interrupt (default)
 
     // Write the general configuration registers 
@@ -199,7 +199,7 @@ int Si470x::getRSSI() {
     return _get(_registers[STATUSRSSI], RSSI, RSSI_MASK);
 }
 
-// Seek up/seek down Sequence (see table 14)
+// Seek up/seek down sequence (see table 14)
 int Si470x::_seek(uint8_t dir) {
     _readRegisters();
     _set(_registers[POWERCFG], SKMODE, SKMODE_WRAP);                        // Wrap
@@ -236,7 +236,6 @@ void Si470x::_resetRDS() {
     memset(_rdsPS1, '\0', 8);
     memset(_rdsPS2, '\0', 8);
     memset(_rdsPS3, '\0', 8);
-    // memset(_rdsPSBuffer, '\0', 8);
 
     // RT
     _rdsABFlag = 0;
@@ -305,12 +304,6 @@ bool Si470x::checkRDS() {
                     strcpy(_rdsPS, _rdsPS2);
                 }
             }
-
-            // Serial.print(idx);
-            // Serial.print(":");
-            // Serial.print((char) (blockD >> 8));
-            // Serial.print((char) (blockD & 0x00FF));
-            // Serial.println();
 
             break;
         }

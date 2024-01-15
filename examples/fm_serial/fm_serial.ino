@@ -7,14 +7,15 @@
 #include <Wire.h>
 #include "Si470x.h"
 
+// Si470x
+// SDIO --> A4 (I2C)
+// SCLK --> A5 (I2C)
 #define PIN_RESET D2
 #define PIN_SDIO A4
 #define PIN_SCLK A5
+#define PIN_GPIO2 A6
 #define PIN_EXTERN_MUTE D3
-Si470x radio(PIN_RESET, PIN_SDIO, PIN_SCLK);
-
-#define VOLUME_MIN 0
-#define VOLUME_MAX 15
+Si470x radio(PIN_RESET, PIN_SDIO, PIN_SCLK, /* enableInterrupts = */ true);
 
 const int _channelCount = 47;
 int _channels[_channelCount] = {
@@ -31,13 +32,26 @@ int _channelIndex = 32; // 101.7 MHz
 // int _channelIndex = 1; // 101.7 MHz
 
 
-int volume = 8;
+int volume = 5;
 int channel = _channels[_channelIndex];
 bool mono = false;
+bool enableRDS = true;
+bool streamRDS = false;
 
 unsigned long _statusMillis = 0;
 const long _statusInterval = 1000;
 int _rssi;
+
+const char *_radioText;
+// u8g2_uint_t _radioTextWidth;
+unsigned long _radioTextMillis = 0;
+const long _radioTextInterval = 5000;
+
+volatile bool _rdsReady = false;
+
+void interruptHandler() {
+    _rdsReady = true;
+}
 
 void setup() {
     pinMode(PIN_EXTERN_MUTE, OUTPUT);
@@ -45,7 +59,7 @@ void setup() {
 
     Serial.begin(9600);
     // while (!Serial) delay(10);
-    delay(1000);
+    delay(500);
 
     // set up Si470x
     Serial.println("Setting up Si470x...");
@@ -60,12 +74,14 @@ void setup() {
     Serial.println("f b     Forward / backward saved channels");
     Serial.println("t       Toggle mono/stereo");
     Serial.println("i       Show Si470x device information");
-    // Serial.println("r       Listen for RDS (15 sec timeout)");
     Serial.println("==================================================");  
 
     radio.setVolume(volume);
     radio.setMono(mono);
     radio.setChannel(channel);
+
+    pinMode(PIN_GPIO2, INPUT_PULLUP);
+    attachInterrupt(PIN_GPIO2, interruptHandler, FALLING);
 }
 
 void printDeviceInfo() {
@@ -101,6 +117,16 @@ void printStatus() {
 
     Serial.print(" | ");
     Serial.print(mono ? "Mono" : "Stereo");
+
+    Serial.print(" | PI code: 0x");
+    Serial.print(radio.getProgramID(), HEX);
+
+    Serial.print(" | PS: ");
+    Serial.print(radio.getStationName());
+
+    Serial.print(" | RT: ");
+    Serial.print(radio.getRadioText());
+
     Serial.println();
 }
 
@@ -116,6 +142,14 @@ void loop() {
         printStatus();
     }
 
+    // poll radio text
+    if (currentMillis - _radioTextMillis >= _radioTextInterval) {
+        _radioText = radio.getRadioText();
+        // _radioTextWidth = u8g2.getUTF8Width(_radioText);
+        _radioTextMillis = currentMillis;
+    }
+
+    // check serial input
     if (Serial.available()) {
         char ch = Serial.read();
         if (ch == 'i') {
@@ -151,5 +185,11 @@ void loop() {
             radio.setChannel(channel);
             printStatus();
         }
+    }
+
+    // poll RDS
+    if (enableRDS && _rdsReady) {
+        _rdsReady = false;
+        radio.checkRDS();
     }
 }

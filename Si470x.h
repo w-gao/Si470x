@@ -56,7 +56,7 @@ static const uint8_t SKCNT_MAX = 0b1111;                // min (fewest stops)
 
 class Si470x {
   public:
-    Si470x(int pinRST, int pinSDIO, int pinSCLK, bool usingINT);
+    Si470x(int pinRST, int pinSDIO, int pinSCLK, bool enableInterrupts);
     void begin();
     void streamRDS(bool streamRDS);
 
@@ -94,7 +94,7 @@ class Si470x {
 
   private:
     int _pinRST, _pinSDIO, _pinSCLK;
-    bool _usingINT, _streamRDS;
+    bool _enableInterrupts, _streamRDS;
     uint16_t _registers[16]; // shadow registers
 
     int _bandLowerLimit;
@@ -106,7 +106,7 @@ class Si470x {
     uint8_t _rdsPTY;
     uint8_t _rdsRecvSegments;
     char _rdsPS[9];
-    char _rdsPS1[9], _rdsPS2[9], _rdsPS3[9];
+    char _rdsPS1[9], _rdsPS2[9], _rdsPS3[9]; // PS buffers
 
     uint8_t _rdsABFlag, _rdsPrevABFlag;
     uint8_t _rdsIdx;

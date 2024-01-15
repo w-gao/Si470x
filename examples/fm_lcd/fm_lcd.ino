@@ -18,7 +18,7 @@
 #define PIN_SCLK A5
 #define PIN_GPIO2 A6
 #define PIN_EXTERN_MUTE D3
-Si470x radio(PIN_RESET, PIN_SDIO, PIN_SCLK, /* usingINT = */ true);
+Si470x radio(PIN_RESET, PIN_SDIO, PIN_SCLK, /* enableInterrupts = */ true);
 
 // Volume control
 #define PIN_VOL_DT D5
@@ -204,8 +204,6 @@ void updateLCD() {
             u8g2.print("*");
         }
     }
-
-    // if (enableRDS) u8g2.print(radio.getRadioText());
 
     u8g2.sendBuffer();
 }

@@ -9,16 +9,20 @@
 #include "Si470x.h"
 #include "RotaryEncoder.h"
 
+// Si470x
+// SDIO --> A4 (I2C)
+// SCLK --> A5 (I2C)
 #define PIN_RESET D2
 #define PIN_SDIO A4
 #define PIN_SCLK A5
+#define PIN_GPIO2 A6
 #define PIN_EXTERN_MUTE D3
-Si470x radio(PIN_RESET, PIN_SDIO, PIN_SCLK);
+Si470x radio(PIN_RESET, PIN_SDIO, PIN_SCLK, /* enableInterrupts = */ true);
 
 // Volume control
 #define PIN_VOL_DT D5
-#define PIN_VOL_CLK D4
-#define PIN_VOL_SW D6
+#define PIN_VOL_CLK D6
+#define PIN_VOL_SW D4
 
 #define VOLUME_MIN 0
 #define VOLUME_MAX 15
@@ -27,8 +31,8 @@ RotaryEncoder volumeControl(PIN_VOL_DT, PIN_VOL_CLK, PIN_VOL_SW);
 
 // Channel control
 #define PIN_CHAN_DT D8
-#define PIN_CHAN_CLK D7
-#define PIN_CHAN_SW D9
+#define PIN_CHAN_CLK D9
+#define PIN_CHAN_SW D7
 
 RotaryEncoder channelControl(PIN_CHAN_DT, PIN_CHAN_CLK, PIN_CHAN_SW);
 
@@ -47,25 +51,38 @@ int _channelIndex = 32; // 101.7 MHz
 // int _channelIndex = 1; // 101.7 MHz
 
 
-int volume = 8;
+int volume = 5;
 int channel = _channels[_channelIndex];
 bool mono = false;
+bool enableRDS = true;
+bool streamRDS = false;
 
 unsigned long _statusMillis = 0;
-const long _statusInterval = 2000;
+const long _statusInterval = 1000;
 int _rssi;
+
+const char *_radioText;
+// u8g2_uint_t _radioTextWidth;
+unsigned long _radioTextMillis = 0;
+const long _radioTextInterval = 5000;
+
+volatile bool _rdsReady = false;
+
+void interruptHandler() {
+    _rdsReady = true;
+}
 
 void setup() {
     pinMode(PIN_EXTERN_MUTE, OUTPUT);
     digitalWrite(PIN_EXTERN_MUTE, HIGH);
 
-    Serial.begin(9600);
-    // while (!Serial) delay(10);
-    delay(1000);
-
     // set up controls
     volumeControl.setup();
     channelControl.setup();
+
+    Serial.begin(9600);
+    // while (!Serial) delay(10);
+    delay(500);
 
     // set up Si470x
     Serial.println("Setting up Si470x...");
@@ -80,7 +97,6 @@ void setup() {
     Serial.println("f b     Forward / backward saved channels");
     Serial.println("t       Toggle mono/stereo");
     Serial.println("i       Show Si470x device information");
-    // Serial.println("r       Listen for RDS (15 sec timeout)");
     Serial.println("==================================================");  
 
     radio.setVolume(volume);
@@ -88,6 +104,9 @@ void setup() {
     radio.setChannel(channel);
     volumeControl.setValue(volume);
     channelControl.setValue(_channelIndex);
+
+    pinMode(PIN_GPIO2, INPUT_PULLUP);
+    attachInterrupt(PIN_GPIO2, interruptHandler, FALLING);
 }
 
 void printDeviceInfo() {
@@ -123,6 +142,16 @@ void printStatus() {
 
     Serial.print(" | ");
     Serial.print(mono ? "Mono" : "Stereo");
+
+    Serial.print(" | PI code: 0x");
+    Serial.print(radio.getProgramID(), HEX);
+
+    Serial.print(" | PS: ");
+    Serial.print(radio.getStationName());
+
+    Serial.print(" | RT: ");
+    Serial.print(radio.getRadioText());
+
     Serial.println();
 }
 
@@ -136,6 +165,13 @@ void loop() {
         // periodically print status
         _statusMillis = currentMillis;
         printStatus();
+    }
+
+    // poll radio text
+    if (currentMillis - _radioTextMillis >= _radioTextInterval) {
+        _radioText = radio.getRadioText();
+        // _radioTextWidth = u8g2.getUTF8Width(_radioText);
+        _radioTextMillis = currentMillis;
     }
 
     // check volume control
@@ -179,6 +215,13 @@ void loop() {
         printStatus();
     }
 
+    if (channelControl.pressed()) {
+        // enableRDS = !enableRDS;
+        streamRDS = !streamRDS;
+        radio.streamRDS(streamRDS);
+        printStatus();
+    }
+
     // check serial input
     if (Serial.available()) {
         char ch = Serial.read();
@@ -217,5 +260,11 @@ void loop() {
             radio.setChannel(channel);
             printStatus();
         }
+    }
+
+    // poll RDS
+    if (enableRDS && _rdsReady) {
+        _rdsReady = false;
+        radio.checkRDS();
     }
 }
