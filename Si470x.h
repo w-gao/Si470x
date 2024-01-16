@@ -56,9 +56,12 @@ static const uint8_t SKCNT_MAX = 0b1111;                // min (fewest stops)
 
 class Si470x {
   public:
+    /**
+     * With enableInterrupts = true, Si470x is set up to interrupt on GPIO2 when RDS is ready. The caller
+     * is responsible of handling the interrupt and calling Si470x::checkRDS() at the earliest convenience.
+     */
     Si470x(int pinRST, int pinSDIO, int pinSCLK, bool enableInterrupts);
     void begin();
-    void streamRDS(bool streamRDS);
 
     int getPartNumber();                                // Get the part number
     int getManufacturerID();                            // Get the manufacturer ID
@@ -66,8 +69,11 @@ class Si470x {
     int getDevice();                                    // Get the identity of device
     int getFirmwareVersion();                           // Get the firmware revision
 
+    bool getSoftmute();                                 // Get softmute status
+    void setSoftmute(bool disabled);                    // Enable/disable softmute
     bool getMute();                                     // Get mute status
-    void setMute(bool disabled);                        // Set mute (false = mute)
+    void setMute(bool disabled);                        // Enable/disable mute
+    bool getMono();                                     // Get mono/stereo status
     void setMono(bool enabled);                         // Set mono output (false = stereo)
     void setVolume(int vol);			                      // Set volume. (0 <= vol <= 15)
     int getChannel();                                   // Get current channel
@@ -86,11 +92,12 @@ class Si470x {
     // Decrement channel by one step. Returns previous channel (not necessarily tuned) or 0.
     inline int decChannel() { return setChannel(getChannel() - _bandSpacing); }
 
+    void streamRDS(bool streamRDS);
     bool checkRDS();                                    // Check RDS
     uint16_t getProgramID();                            // Return the program identification (PI) code
     uint8_t getProgramType();                           // Return the program type (PTY) code
     const char* getStationName();                       // Return the station name (PS)
-    const char* getRadioText();                        // Return the station name (PS)
+    const char* getRadioText();                         // Return the station name (PS)
 
   private:
     int _pinRST, _pinSDIO, _pinSCLK;

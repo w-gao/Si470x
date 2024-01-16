@@ -134,15 +134,31 @@ void Si470x::begin() {
     delay(200);
 }
 
+bool Si470x::getSoftmute() {
+    _readRegisters();
+    return _get(_registers[POWERCFG], DSMUTE); // 0 = enable
+}
+
+void Si470x::setSoftmute(bool disabled) {
+    _readRegisters();
+    _set(_registers[POWERCFG], DSMUTE, disabled);
+    _updateRegisters();
+}
+
 bool Si470x::getMute() {
     _readRegisters();
-    return _get(_registers[POWERCFG], DMUTE);
+    return _get(_registers[POWERCFG], DMUTE) == 0; // 0 = enable
 }
 
 void Si470x::setMute(bool disabled) {
     _readRegisters();
     _set(_registers[POWERCFG], DMUTE, disabled);
     _updateRegisters();
+}
+
+bool Si470x::getMono() {
+    _readRegisters();
+    return _get(_registers[POWERCFG], MONO) == 1; // 1 = force mono
 }
 
 void Si470x::setMono(bool enabled) {
