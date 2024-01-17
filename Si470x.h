@@ -1,3 +1,12 @@
+/**
+ * Si470x
+ *
+ * Copyright (c) 2024 William Gao
+ * 
+ * This software is provided "as-is", without any warranty. See the LICENSE file 
+ * for full license terms and conditions. Use of this software indicates agreement 
+ * with those terms.
+ */
 #ifndef Si470X_H
 #define Si470X_H
 

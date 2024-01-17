@@ -1,3 +1,12 @@
+/**
+ * Si470x
+ *
+ * Copyright (c) 2024 William Gao
+ * 
+ * This software is provided "as-is", without any warranty. See the LICENSE file 
+ * for full license terms and conditions. Use of this software indicates agreement 
+ * with those terms.
+ */
 #include "Si470x.h"
 #include "Wire.h"
 
@@ -196,7 +205,9 @@ int Si470x::setChannel(int freq) {
     _set(_registers[CHANNEL], TUNE, true);                                  // Set Tune bit
     _updateRegisters();
 
-    delay(60);
+    // TODO: use interrupts! Polling is not recommended as it can interfere with the tuning operation.
+
+    delay(10);
     while (_getSTC() == 0) delay(1);                                        // Poll until STC bit is set
 
     _readRegisters();
